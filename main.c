@@ -1,5 +1,6 @@
 #include "dhcp.h"
 #include "server.h"
+#include "lease.h"
 #include <stdio.h>
 
 int main()
