@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #define DHCP_SERVER_PORT 67
+#define DHCP_CLIENT_PORT 68
 
 // 99, 130, 83 and 99 in hexa
 #define DHCP_MAGIC 0x63825363
