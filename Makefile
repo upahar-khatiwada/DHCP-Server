@@ -1,13 +1,14 @@
 CC      = gcc
 CFLAGS  = -Wall -Wextra -g
+LDLIBS  = -lhiredis
 TARGET  = dhcp_server
 SRC     = main.c
-HDRS    = dhcp.h server.h
+HDRS    = dhcp.h server.h lease.h
 
 all: $(TARGET)
 
 $(TARGET): $(SRC) $(HDRS)
-	$(CC) $(CFLAGS) -o $@ $(SRC)
+	$(CC) $(CFLAGS) -o $@ $(SRC) $(LDLIBS)
 
 run: $(TARGET)
 	sudo ./$(TARGET)
