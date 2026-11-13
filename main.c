@@ -1,0 +1,8 @@
+#include "dhcp.h"
+#include "server.h"
+#include <stdio.h>
+
+int main()
+{
+    return 0;
+}

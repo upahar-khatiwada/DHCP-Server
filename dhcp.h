@@ -1,12 +1,24 @@
 // https://datatracker.ietf.org/doc/html/rfc2131
 
-#include <stddef.h>
+#ifndef DHCP_H
+#define DHCP_H
+
+#include <stdint.h>
+
+#define DHCP_SERVER_PORT 67
 
 // 99, 130, 83 and 99 in hexa
 #define DHCP_MAGIC 0x63825363
 #define DHCP_HDR_LEN 240 // 236 + 4 bytes for magic
-#define BOOTREQUEST 1 // packet sent by client to server
-#define BOOTREPLY   2 // packet sent by server to client
+#define BOOTREQUEST 1    // packet sent by client to server
+#define BOOTREPLY 2      // packet sent by server to client
+
+// hardcoded for now
+#define SERVER_IP "192.168.50.1"
+#define OFFER_IP "192.168.50.100"
+#define SUBNET_MASK "255.255.255.0"
+#define LEASE_SECS 3600
+#define MIN_REPLY 300 // minimum size of reply packet
 
 enum dhcp_option
 {
@@ -34,7 +46,8 @@ enum dhcp_msg_type
     DHCPRELEASE = 7,
 };
 
-struct dhcp_header
+// The packed attribute disables padding.
+struct __attribute__((packed)) dhcp_header
 {
     uint8_t op, htype, hlen, hops;
     uint32_t xid;
@@ -44,42 +57,6 @@ struct dhcp_header
     uint8_t sname[64];
     uint8_t file[128];
     uint32_t magic;
-} __attribute__((packed));
-// attribute packed disables padding
+};
 
-// https://datatracker.ietf.org/doc/html/rfc1533
-static const uint8_t *find_option(const uint8_t *option, size_t len, uint8_t code, uint8_t *option_len)
-{
-    size_t i = 0;
-    while (i < len)
-    {
-        uint8_t c = option[i];
-        if (c == DHCP_OPT_PAD)
-        {
-            i++; // code 0 is for padding
-            continue;
-        }
-
-        if (c == DHCP_OPT_END)
-            // code 255 is for end of options
-            break;
-
-        if (i + 1 >= len)
-            break;
-
-        uint8_t olen = option[i + 1];
-
-        if (i + 2 + olen > len) // value goes past the packet
-            break;
-
-        if (c == code)
-        {
-            *option_len = olen;
-            return &option[i + 2];
-        }
-
-        i += 2 + (size_t)olen; // 2 because 1 for code and 1 for code length
-    }
-
-    return NULL; // error
-}
+#endif

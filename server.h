@@ -1,10 +1,15 @@
-#include <arpa/inet.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
+#ifndef SERVER_H
+#define SERVER_H
 
-#define DHCP_SERVER_PORT 67
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include "dhcp.h"
 
 int create_socket()
 {
@@ -41,3 +46,42 @@ int create_socket()
 
     return sockfd;
 }
+
+// https://datatracker.ietf.org/doc/html/rfc1533
+static const uint8_t *find_option(const uint8_t *option, size_t len, uint8_t code, uint8_t *option_len)
+{
+    size_t i = 0;
+    while (i < len)
+    {
+        uint8_t c = option[i];
+        if (c == DHCP_OPT_PAD)
+        {
+            i++; // code 0 is for padding
+            continue;
+        }
+
+        if (c == DHCP_OPT_END)
+            // code 255 is for end of options
+            break;
+
+        if (i + 1 >= len)
+            break;
+
+        uint8_t olen = option[i + 1];
+
+        if (i + 2 + olen > len) // value goes past the packet
+            break;
+
+        if (c == code)
+        {
+            *option_len = olen;
+            return &option[i + 2];
+        }
+
+        i += 2 + (size_t)olen; // 2 because 1 for code and 1 for code length
+    }
+
+    return NULL; // error
+}
+
+#endif
