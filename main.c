@@ -8,6 +8,20 @@ int main()
     int sockfd = create_socket();
     uint8_t buf[1500];
 
+    redisContext *ctx = lease_connect();
+
+    if (ctx == NULL || ctx->err)
+    {
+        perror("redix ctx error");
+        exit(EXIT_FAILURE);
+    }
+
+    if (lease_seed_pool(ctx) < 0)
+    {
+        perror("seed failed");
+        exit(EXIT_FAILURE);
+    }
+
     printf("DHCP Server listening on port %d\n", DHCP_SERVER_PORT);
 
     while (1)
@@ -55,10 +69,18 @@ int main()
         if (type == DHCPDISCOVER)
         {
             uint8_t res[1500];
-            struct in_addr offer_addr;
+            uint32_t offer_addr;
 
-            inet_pton(AF_INET, OFFER_IP, &offer_addr);
-            size_t res_len = build_response(req, DHCPOFFER, offer_addr.s_addr, res);
+            char mac[MAC_STR_LEN];
+            mac_to_str(req->chaddr, req->hlen, mac);
+
+            if (lease_allocate(ctx, mac, &offer_addr) == 0)
+            {
+                printf("Pool doesn\'t have IP address for %s\n", mac);
+                continue;
+            }
+
+            size_t res_len = build_response(req, DHCPOFFER, offer_addr, res);
 
             uint32_t dest = htonl(INADDR_BROADCAST);
             send_reply(sockfd, res, res_len, dest);
@@ -66,9 +88,8 @@ int main()
 
         else if (type == DHCPREQUEST)
         {
-            struct in_addr server_addr, offer_addr;
+            struct in_addr server_addr;
             inet_pton(AF_INET, SERVER_IP, &server_addr);
-            inet_pton(AF_INET, OFFER_IP, &offer_addr);
 
             v = find_option(opts, opts_len, DHCP_OPT_SERVER_ID, &l);
             if (v && l == 4 && memcmp(v, &server_addr, 4) != 0)
@@ -76,6 +97,9 @@ int main()
                 printf("REQUEST is for another server, we ignore it\n");
                 continue;
             }
+
+            char mac[MAC_STR_LEN];
+            mac_to_str(req->chaddr, req->hlen, mac);
 
             // option 50 for a client to request an IP Address
             uint32_t wanted = req->ciaddr;
@@ -88,12 +112,15 @@ int main()
             size_t res_len;
             uint32_t dest_ip = htonl(INADDR_BROADCAST);
 
-            if (wanted == offer_addr.s_addr)
+            if (lease_commit(ctx, mac, wanted, LEASE_SECS))
             {
-                res_len = build_response(req, DHCPACK, offer_addr.s_addr, res);
+                res_len = build_response(req, DHCPACK, wanted, res);
                 if (req->ciaddr != 0) // client already has an IP address to renew
                     dest_ip = req->ciaddr;
-                printf("sending ACK %s\n", OFFER_IP);
+
+                char ip_str[INET_ADDRSTRLEN];
+                ip_to_str(wanted, ip_str);
+                printf("sending ACK %s\n", ip_str);
             }
             else
             {
