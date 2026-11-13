@@ -1,5 +1,7 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 
 #define DHCP_SERVER_PORT 67
