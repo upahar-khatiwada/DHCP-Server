@@ -58,19 +58,48 @@ int main()
             inet_pton(AF_INET, OFFER_IP, &offer_addr);
             size_t res_len = build_response(req, DHCPOFFER, offer_addr.s_addr, res);
 
-            struct sockaddr_in dest;
-            memset(&dest, 0, sizeof(dest));
-            dest.sin_family = AF_INET;
-            dest.sin_port = htons(DHCP_CLIENT_PORT);
-            dest.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+            uint32_t dest = htonl(INADDR_BROADCAST);
+            send_reply(sockfd, res, res_len, dest);
+        }
 
-            if (sendto(sockfd, res, res_len, 0,
-                       (struct sockaddr *)&dest, sizeof(dest)) < 0)
-                perror("sendto error");
+        else if (type == DHCPREQUEST)
+        {
+            struct in_addr server_addr, offer_addr;
+            inet_pton(AF_INET, SERVER_IP, &server_addr);
+            inet_pton(AF_INET, OFFER_IP, &offer_addr);
+
+            v = find_option(opts, opts_len, DHCP_OPT_SERVER_ID, &l);
+            if (v && l == 4 && memcmp(v, &server_addr, 4) != 0)
+            {
+                printf("REQUEST is for another server, we ignore it\n");
+                continue;
+            }
+
+            // option 50 for a client to request an IP Address
+            uint32_t wanted = req->ciaddr;
+            v = find_option(opts, opts_len, DHCP_OPT_REQUESTED_IP, &l);
+
+            if (v && l == 4)
+                memcpy(&wanted, v, 4);
+
+            uint8_t res[1500];
+            size_t res_len;
+            uint32_t dest_ip = htonl(INADDR_BROADCAST);
+
+            if (wanted == offer_addr.s_addr)
+            {
+                res_len = build_response(req, DHCPACK, offer_addr.s_addr, res);
+                if (req->ciaddr != 0) // client already has an IP address to renew
+                    dest_ip = req->ciaddr;
+                printf("sending ACK %s\n", OFFER_IP);
+            }
             else
-                printf("sent OFFER %s\n", OFFER_IP);
+            {
+                res_len = build_response(req, DHCPNAK, 0, res);
+                printf("sending NAK\n");
+            }
+
+            send_reply(sockfd, res, res_len, dest_ip);
         }
     }
-
-    return 0;
 }

@@ -111,6 +111,12 @@ static size_t build_response(const struct dhcp_header *req, uint8_t msg_type, ui
     r->flags = req->flags;
     r->giaddr = req->giaddr;
     r->yiaddr = yiaddr;
+
+    if (msg_type == DHCPACK)
+    {
+        r->ciaddr = req->ciaddr;
+    }
+    
     memcpy(r->chaddr, req->chaddr, 16);
     r->magic = htonl(DHCP_MAGIC);
 
@@ -123,15 +129,31 @@ static size_t build_response(const struct dhcp_header *req, uint8_t msg_type, ui
     uint8_t *p = out + DHCP_HDR_LEN;
     p = add_option(p, DHCP_OPT_MSG_TYPE, 1, &msg_type);
     p = add_option(p, DHCP_OPT_SERVER_ID, 4, &server);
-    p = add_option(p, DHCP_OPT_LEASE_TIME, 4, &lease);
-    p = add_option(p, DHCP_OPT_SUBNET_MASK, 4, &mask);
-    p = add_option(p, DHCP_OPT_ROUTER, 4, &server);
+
+    if (msg_type != DHCPNAK)
+    {
+        p = add_option(p, DHCP_OPT_LEASE_TIME, 4, &lease);
+        p = add_option(p, DHCP_OPT_SUBNET_MASK, 4, &mask);
+        p = add_option(p, DHCP_OPT_ROUTER, 4, &server);
+    }
 
     *p = DHCP_OPT_END;
     p++;
 
     size_t len = (size_t)(p - out);
     return len < MIN_REPLY ? MIN_REPLY : len;
+}
+
+static void send_reply(int sockfd, const uint8_t *res, size_t len, uint32_t dest_ip)
+{
+    struct sockaddr_in dest;
+    memset(&dest, 0, sizeof(dest));
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(DHCP_CLIENT_PORT);
+    dest.sin_addr.s_addr = dest_ip;
+
+    if (sendto(sockfd, res, len, 0, (struct sockaddr *)&dest, sizeof(dest)) < 0)
+        perror("sendto error");
 }
 
 #endif
