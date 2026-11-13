@@ -58,6 +58,16 @@ int main()
         // printf("message type = %d\n", type);
         print_packet_info(req, n, opts_len, type);
 
+        struct in_addr server_addr;
+        inet_pton(AF_INET, SERVER_IP, &server_addr);
+
+        v = find_option(opts, opts_len, DHCP_OPT_SERVER_ID, &l);
+        if (v && l == 4 && memcmp(v, &server_addr, 4) != 0)
+        {
+            printf("REQUEST is for another server, we ignore it\n");
+            continue;
+        }
+
         v = find_option(opts, opts_len, DHCP_OPT_REQUESTED_IP, &l);
         if (v && l == 4)
         {
@@ -66,7 +76,9 @@ int main()
             printf("requested IP = %s\n", inet_ntoa(requested_ip));
         }
 
-        if (type == DHCPDISCOVER)
+        switch (type)
+        {
+        case DHCPDISCOVER:
         {
             uint8_t res[1500];
             uint32_t offer_addr;
@@ -84,20 +96,12 @@ int main()
 
             uint32_t dest = htonl(INADDR_BROADCAST);
             send_reply(sockfd, res, res_len, dest);
+
+            break;
         }
 
-        else if (type == DHCPREQUEST)
+        case DHCPREQUEST:
         {
-            struct in_addr server_addr;
-            inet_pton(AF_INET, SERVER_IP, &server_addr);
-
-            v = find_option(opts, opts_len, DHCP_OPT_SERVER_ID, &l);
-            if (v && l == 4 && memcmp(v, &server_addr, 4) != 0)
-            {
-                printf("REQUEST is for another server, we ignore it\n");
-                continue;
-            }
-
             char mac[MAC_STR_LEN];
             mac_to_str(req->chaddr, req->hlen, mac);
 
@@ -129,6 +133,72 @@ int main()
             }
 
             send_reply(sockfd, res, res_len, dest_ip);
+
+            break;
+        }
+
+        case DHCPRELEASE:
+        {
+            char mac[MAC_STR_LEN];
+            char owner[MAC_STR_LEN];
+            char ip[INET_ADDRSTRLEN];
+
+            if (req->ciaddr == 0 || req->hlen == 0)
+                break;
+
+            mac_to_str(req->chaddr, req->hlen, mac);
+            ip_to_str(req->ciaddr, ip);
+
+            if (lease_get_owner(ctx, ip, owner, sizeof(owner)) &&
+                strcmp(owner, mac) == 0)
+            {
+                if (lease_release(ctx, mac, ip))
+                    printf("RELEASE: %s freed by %s\n", ip, mac);
+            }
+            else
+            {
+                printf("RELEASE: ignoring %s from %s (not the owner)\n", ip, mac);
+            }
+
+            break;
+        }
+
+        case DHCPDECLINE:
+        {
+            char mac[MAC_STR_LEN];
+            char owner[MAC_STR_LEN];
+            char ip[INET_ADDRSTRLEN];
+
+            if (req->hlen == 0)
+                break;
+
+            v = find_option(opts, opts_len, DHCP_OPT_REQUESTED_IP, &l);
+            if (!v || l != 4)
+                break;
+
+            uint32_t bad_ip;
+            memcpy(&bad_ip, v, 4);
+
+            mac_to_str(req->chaddr, req->hlen, mac);
+            ip_to_str(bad_ip, ip);
+
+            if (lease_get_owner(ctx, ip, owner, sizeof(owner)) &&
+                strcmp(owner, mac) == 0)
+            {
+                if (lease_decline(ctx, mac, ip))
+                    printf("DECLINE: %s quarantined for %d s (conflict reported by %s)\n",
+                           ip, DECLINE_QUARANTINE, mac);
+            }
+            else
+            {
+                printf("DECLINE: ignoring %s from %s (not the owner)\n", ip, mac);
+            }
+
+            break;
+        }
+
+        default:
+            break;
         }
     }
 }

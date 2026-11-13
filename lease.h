@@ -10,9 +10,10 @@
 
 #define REDIS_HOST "127.0.0.1"
 #define REDIS_PORT 6379
-#define POOL_START "192.168.50.100"
+#define POOL_START "192.168.50.50"
 #define POOL_END "192.168.50.200"
 #define OFFER_TTL 60
+#define DECLINE_QUARANTINE 600
 
 #define MAC_STR_LEN 48
 #define KEY_POOL "dhcp:pool"
@@ -244,6 +245,34 @@ int lease_commit(redisContext *c, const char *mac, uint32_t ip_net, uint32_t lea
     freeReplyObject(redisCommand(c, "SET dhcp:mac:%s %s EX %u", mac, ip, lease_secs));
 
     return 1;
+}
+
+int lease_release(redisContext *c, const char *mac, const char *ip)
+{
+    redisReply *r = redisCommand(c, "DEL dhcp:lease:%s dhcp:mac:%s", ip, mac);
+    if (r == NULL)
+        return 0;
+
+    int ok = (r->type == REDIS_REPLY_INTEGER && r->integer > 0);
+
+    freeReplyObject(r);
+    return ok;
+}
+
+int lease_decline(redisContext *c, const char *mac, const char *ip)
+{
+    freeReplyObject(redisCommand(c, "MULTI"));
+    freeReplyObject(redisCommand(c, "DEL dhcp:lease:%s dhcp:mac:%s", ip, mac));
+    freeReplyObject(redisCommand(c, "HSET dhcp:lease:%s mac declined state declined", ip));
+    freeReplyObject(redisCommand(c, "EXPIRE dhcp:lease:%s %d", ip, DECLINE_QUARANTINE));
+
+    redisReply *r = redisCommand(c, "EXEC");
+    if (r == NULL)
+        return 0;
+
+    int ok = (r->type == REDIS_REPLY_ARRAY);
+    freeReplyObject(r);
+    return ok;
 }
 
 #endif
