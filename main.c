@@ -40,7 +40,8 @@ int main()
 
         const uint8_t *v = find_option(opts, opts_len, DHCP_OPT_MSG_TYPE, &l);
         int type = (v && l == 1) ? v[0] : -1;
-        printf("message type = %d\n", type);
+        // printf("message type = %d\n", type);
+        print_packet_info(req, n, opts_len, type);
 
         v = find_option(opts, opts_len, DHCP_OPT_REQUESTED_IP, &l);
         if (v && l == 4)
