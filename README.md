@@ -7,6 +7,26 @@ Discover → Offer → Request → Ack exchange, plus Release, Decline and NAK.
 > Use this only on an isolated test network (a network namespace or VM). A DHCP
 > server can disrupt address assignment for other devices on the same network.
 
+## Output
+
+The server (left) and `dhclient` in an isolated network namespace (right) complete
+the full Discover → Offer → Request → Ack exchange, and the client is bound to
+`192.168.50.125`:
+
+![DHCP server and client completing the DORA exchange](screenshots/01-dhcp-exchange.png)
+
+The lease as stored in Redis after the ACK: owner MAC, `bound` state, expiry and
+TTL, plus the MAC → IP mapping used to give a returning client the same address:
+
+![Redis lease keys after the ACK](screenshots/04-redis-lease.png)
+
+Releasing the lease (`dhclient -r`) frees the IP on the server and removes both
+lease keys from Redis:
+
+![Client releasing the lease](screenshots/05-release.png)
+
+More screenshots are in [screenshots/](screenshots/).
+
 ## Features
 
 - Parses DHCP packets with bounds-checked option walking (never trusts client lengths)
@@ -123,6 +143,14 @@ sudo ./dhcp_server        # or: make run
 Port 67 is privileged, so the server needs `sudo`. You should see
 `DHCP Server listening on port 67`.
 
+If a host firewall such as `ufw` is enabled, it drops the client's broadcast
+before it reaches the server (the client keeps repeating `DHCPDISCOVER` and the
+server prints nothing). Allow traffic on the test interface:
+
+```sh
+sudo iptables -I INPUT -i veth-srv -j ACCEPT
+```
+
 ### 4. Get a lease from the test client
 
 In another terminal:
@@ -177,7 +205,7 @@ These are compile-time constants for now:
 | Server IP and router | [dhcp.h](dhcp.h) `SERVER_IP`                   | `192.168.50.1`            |
 | Subnet mask          | [dhcp.h](dhcp.h) `SUBNET_MASK`                 | `255.255.255.0`           |
 | Lease time           | [dhcp.h](dhcp.h) `LEASE_SECS`                  | `3600`                    |
-| Address pool         | [lease.h](lease.h) `POOL_START` / `POOL_END`   | `192.168.50.100` – `.200` |
+| Address pool         | [lease.h](lease.h) `POOL_START` / `POOL_END`   | `192.168.50.50` – `.200`  |
 | Offer hold time      | [lease.h](lease.h) `OFFER_TTL`                 | `60`                      |
 | Decline quarantine   | [lease.h](lease.h) `DECLINE_QUARANTINE`        | `600`                     |
 | Redis address        | [lease.h](lease.h) `REDIS_HOST` / `REDIS_PORT` | `127.0.0.1:6379`          |
