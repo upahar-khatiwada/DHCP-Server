@@ -9,21 +9,32 @@ Discover → Offer → Request → Ack exchange, plus Release, Decline and NAK.
 
 ## Output
 
-The server (left) and `dhclient` in an isolated network namespace (right) complete
-the full Discover → Offer → Request → Ack exchange, and the client is bound to
-`192.168.50.125`:
+The server and `dhclient` (running in an isolated network namespace) complete the
+full Discover → Offer → Request → Ack exchange, and the client is bound to
+`192.168.50.125`.
 
-![DHCP server and client completing the DORA exchange](screenshots/01-dhcp-exchange.png)
+**Terminal 1: the server** logs the DISCOVER (type 1) and REQUEST (type 3) packets
+and sends the ACK:
+
+![DHCP server receiving DISCOVER and REQUEST and sending ACK](screenshots/01a-exchange-server.png)
+
+**Terminal 2: the client** gets an OFFER, requests that address and is bound to it:
+
+![dhclient completing the DORA exchange](screenshots/01b-exchange-client.png)
 
 The lease as stored in Redis after the ACK: owner MAC, `bound` state, expiry and
 TTL, plus the MAC → IP mapping used to give a returning client the same address:
 
 ![Redis lease keys after the ACK](screenshots/04-redis-lease.png)
 
-Releasing the lease (`dhclient -r`) frees the IP on the server and removes both
-lease keys from Redis:
+Releasing the lease (`dhclient -r`) sends a RELEASE (type 7), and the server frees
+the IP:
 
-![Client releasing the lease](screenshots/05-release.png)
+![Server freeing the lease on RELEASE](screenshots/05a-release-server.png)
+
+Both lease keys are then gone from Redis, and only the pool is left:
+
+![Client releasing the lease and Redis keys removed](screenshots/05b-release-client.png)
 
 More screenshots are in [screenshots/](screenshots/).
 
